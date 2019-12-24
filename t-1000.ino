@@ -33,6 +33,8 @@ LiquidCrystal lcd(6, 7, 2, 3, 4, 5);
 
 // State variables
 bool isBrewing = false;
+long millisecondsToBrew = 120000;
+long brewStartTime;
 
 void setup() {
   Serial.begin(9600);
@@ -49,41 +51,33 @@ void setupStepper() {
 void setupLCD() { 
   // Set the column/row counts of the LCD
   lcd.begin(16, 2);
-  lcd.setCursor(0,0);
-  lcd.print("Electropeak.com");
-  lcd.setCursor(0,1);
-  lcd.print("Press Key:");
 }
 
 void loop() {
   checkButtonPress();
-  // Step one revolution in one direction:
-//  Serial.println("clockwise");
-//  myStepper.step(stepsPerRevolution);
-//  delay(500);
-//  
-//  // Step one revolution in the other direction:
-//  Serial.println("counterclockwise");
-//  myStepper.step(-stepsPerRevolution);
-//  delay(500);
+  displayState();
+  displayBrewTime();
+  checkBrewFinish();
+  delay(100); 
 }
 
 void checkButtonPress() {
   int x;
   x = analogRead(0);
   lcd.setCursor(0,1);
+  
   if (x < 60) {
     // Right 
-    lcd.print ("Right ");
-  } else if (x < 200) {
+    addSecond();
+  } else if (x > 100 && x < 150) {
     // Up
     moveStepperUp();
-  } else if (x < 400){
+  } else if (x > 290 && x < 320){
     // Down
     moveStepperDown();
   } else if (x < 600){
     // Left
-   lcd.print ("Left ");
+   removeSecond();
   } else if (x < 800) {
     // Select
     if (isBrewing) {
@@ -94,24 +88,80 @@ void checkButtonPress() {
   }
 }
 
+void addSecond() {
+  Serial.println(millisecondsToBrew);
+  millisecondsToBrew = millisecondsToBrew + 10000;
+  Serial.println(millisecondsToBrew);
+}
+
+void removeSecond() {
+  long newMilliseconds = millisecondsToBrew - 10000;
+  if (newMilliseconds > 0) {
+    millisecondsToBrew = newMilliseconds;
+  }
+}
+
 void moveStepperUp() {
-  Serial.println("Moving stepper up");
   myStepper.step(stepsPerRevolution / 30);
 } 
 
 void moveStepperDown() {
-  Serial.println("Moving stepper down");
   myStepper.step(stepsPerRevolution / 30 * -1);
 }
 
 void startBrew() {
-  Serial.println("Starting brew");
   isBrewing = true;
-  myStepper.step(stepsPerRevolution / 4 * -1);
+  myStepper.step(stepsPerRevolution / 8 * -1);
+  brewStartTime = millis();
 }
 
 void stopBrew() {
-  Serial.println("Stopping brew");
   isBrewing = false;
-  myStepper.step(stepsPerRevolution / 4);
+  myStepper.step(stepsPerRevolution / 8);
+}
+
+void displayState() {
+  lcd.setCursor(0,0);
+  if (isBrewing) {
+    lcd.write("Brew in progress");
+  } else {
+    lcd.write("Not brewing yet ");
+  }
+}
+
+void displayBrewTime() {
+  char buffer[6];
+  int minutes;
+  int seconds;
+  lcd.setCursor(0,1);
+  if (isBrewing) {
+    lcd.write("Remaining     ");
+    lcd.setCursor(11,1);
+    long timeRemaining = millisecondsToBrew - (millis() - brewStartTime);
+    minutes = timeRemaining / 60000;
+    seconds = (timeRemaining % 60000) / 1000;
+  } else {
+    lcd.write("Time     ");
+    lcd.setCursor(11,1);
+    minutes = millisecondsToBrew / 60000;
+    seconds = (millisecondsToBrew % 60000) / 1000;
+  }
+
+  sprintf(buffer, "%02d:%02d", minutes, seconds);
+  lcd.write(buffer);
+}
+
+void checkBrewFinish() {
+   if (!isBrewing) {
+    return;
+   }
+
+   long timeRemaining = millisecondsToBrew - (millis() - brewStartTime);
+   Serial.println(timeRemaining);
+   if (timeRemaining < 0) {
+    lcd.setCursor(11,1);
+    lcd.write("--:--");
+    stopBrew();
+   }
+   
 }
